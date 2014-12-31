@@ -13,3 +13,5 @@ mkdir callback_plugins
 cd callback_plugins
 wget https://raw.githubusercontent.com/petems/ansible-html/master/callback_plugins/html_logs.py
 ```
+
+ansible-playbook -vvvvvv -i hosts  playbook.yml
