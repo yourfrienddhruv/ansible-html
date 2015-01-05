@@ -5,5 +5,5 @@
     scenario : "Blank credentials"
 
   tasks:
-    - name: scenario - Blank credentials
+    - name: Blank credentials
       command: echo 'Blank credentials'

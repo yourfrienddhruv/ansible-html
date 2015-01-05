@@ -5,5 +5,7 @@
     scenario : "Confirmation mail sent"
 
   tasks:
-    - name: scenario - Confirmation mail sent
+    - name: Confirmation mail sent
       command: echo 'Confirmation mail sent'
+
+    - shell: anything

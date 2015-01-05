@@ -5,5 +5,5 @@
     scenario : "Invalid email"
 
   tasks:
-    - name: scenario - Invalid email
+    - name: Invalid email
       command: echo 'Invalid email'

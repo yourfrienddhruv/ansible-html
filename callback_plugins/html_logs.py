@@ -2,11 +2,9 @@
 # And https://gist.github.com/cliffano/9868180
 
 import os
-import time
-import json
+import socket
 from json import JSONEncoder
 from datetime import datetime
-from ansible import utils
 
 datenow = datetime.now()
 datenow = datenow.strftime('%Y-%m-%d-%h-%m-%s')
@@ -324,14 +322,14 @@ STATIC_DOWN = """
                 </button>
                 <a class="navbar-brand" href="#">I/O Testing Report for {{ report.project.name }} Project</a>
             </div>
-            <div class="navbar-collapse collapse">
+            <!--div class="navbar-collapse collapse">
                 <ul class="nav navbar-nav navbar-right">
                     <li><a href="#">Overview</a></li>
                 </ul>
                 <form class="navbar-form navbar-right">
                     <input class="form-control" placeholder="Search By Tags..." type="text">
                 </form>
-            </div>
+            </div-->
         </div>
     </div>
 
@@ -396,8 +394,8 @@ STATIC_DOWN = """
                         </nvd3-pie-chart>
                     </div>
                     <div class="col-sm-3">
-                        <h4>Case Summary</h4>
-                        <span class="text-muted">Total Identified Cases: {{totalCases}}</span>
+                        <h4>Step Execution Summary</h4>
+                        <span class="text-muted">Total Steps: {{totalCases}}</span>
                         <nvd3-pie-chart
                                 data="chartData4CaseSummary"
                                 x="xFunction()"
@@ -499,7 +497,7 @@ STATIC_DOWN = """
                                           </span>
                                           <span class="col-sm-3">
                                             <button type="button" class="btn btn-primary btn-sm" ng-click="showCaseDetails=!showCaseDetails">
-                                                 Total {{ featureSummaryTableData[$parent.$index].scenario[$index].Total }} Cases
+                                                 Total {{ featureSummaryTableData[$parent.$index].scenario[$index].Total }} Steps
                                                  <i class="glyphicon" ng-class="{'glyphicon-chevron-down': showCaseDetails, 'glyphicon-chevron-right': !showCaseDetails}"></i>
                                             </button>
                                           </span>
@@ -561,54 +559,18 @@ STATIC_DOWN = """
 </html>
 """
 
-
-report1 = {
-    "project": {"name": "RDHI"},
-    "environment": {"values": ["Execution Date/Time: 2014-12-04-17:39:05", "Execution Environment: ST",
-                               "TestMachine: harikrishna-ThinkPad-T410",
-                               "Results: results/archieve/rdhi_20141204-173905"]},
-    "signOffSuccessThreshold": 80,
-    "signOffCommentsNegative": "Build Rejected. Build is not stable and Passed Test cases count is less than Accptable number/percentage",
-    "signOffCommentsPositive": "Build Accepted",
-    "features": [
-        {
-            "name": "RDHI Tests",
-            "description": "@TODO.",
-            "tags": ["Regression"],
-            "scenarios": [
-                {
-                    "name": "tc_user_launchrequest",
-                    "description": "Usecase type: tc_user_launchrequest",
-                    "tags": ["Smoke", ""],
-                    "status": "Passed",
-                    "automated": True,
-                    "cases":
-                        [{
-                             "name": "custom_LQ_noPrilim_888",
-                             "status": "Passed"
-                         },
-                         {
-                             "name": "custom_LQ_noPrilim_000",
-                             "status": "Failed"
-                         }
-                        ]
-                }
-            ]
-        }
-    ]
-}
-
 report = {
-    "project": {"name": "RDHI"},
-    "environment": {"values": ["Execution Date/Time: 2014-12-04-17:39:05", "Execution Environment: ST",
-                               "TestMachine: harikrishna-ThinkPad-T410",
-                               "Results: results/archieve/rdhi_20141204-173905"]},
+    "project": {},
+    "environment": {},
     "signOffSuccessThreshold": 80,
     "signOffCommentsNegative": "Build Rejected. Build is not stable and Passed Test cases count is less than Accptable number/percentage",
     "signOffCommentsPositive": "Build Accepted",
     "features":[]
 }
 
+
+env_values = []
+scenario_status = "Passed"
 
 def find_feature(feature):
     for f in report["features"]:
@@ -625,23 +587,34 @@ def find_scenario(scenarios, scenario):
     return scenario
 
 
-def record_step(play, res, host, status):
+def record_step(play, task, res, host, status):
     local_vars = play.vars
-    print(local_vars)
+    if "project_name" in local_vars.keys():
+        report["project"] = {"name": local_vars["project_name"]}
+    if "environment" in local_vars.keys():
+        env_values.append("Execution Date/Time: "+str(datetime.now()))
+        env_values.append("Execution Environment: "+local_vars["environment"])
+        env_values.append("TestMachine: "+socket.gethostname())
     if type(res) == type(dict()):
         if "cmd" in res.keys():
             feature = find_feature({"name" : local_vars['feature'], "scenarios" : []})
             scenario = find_scenario(feature["scenarios"], {"name" : local_vars['scenario'], "cases" : []})
-            scenario["cases"].append({"name": res["cmd"], "status": status})
-            print(JSONEncoder().encode(report))
+            scenario["cases"].append({"name": task, "status": status})
+            if status == "Failed":
+                scenario["status"] = "Failed"
+            else:
+                scenario["status"] = status
+
+
 
 
 def write_report():
     if not os.path.exists(report_dir):
         os.makedirs(report_dir)
-
-    filnename = (report_dir + '/' + datenow + ".html")
+    filnename = (report_dir + datenow + ".html")
     path = os.path.join(filnename)
+    env_values.append("Results: "+path)
+    report["environment"] = {"values": env_values}
     reportFile = open(path, "a")
     reportFile.write(STATIC_UP)
     reportFile.write(JSONEncoder().encode(report))
@@ -656,46 +629,46 @@ class CallbackModule(object):
 
     def __init__(self):
         self.disabled = False
-        self.msg_uri = "https://api.hipchat.com/v1/rooms/message?"
         self.token = None
         self.printed_playbook = False
         self.playbook = None
         self.play = None
         self.playbook_name = None
         self.inventory = None
+        self.task = None
 
     def on_any(self, *args, **kwargs):
         pass
 
     def runner_on_failed(self, host, res, ignore_errors=False):
-        record_step(self.play, res, host, "Failed")
+        record_step(self.play, self.task, res, host, "Failed")
 
     def runner_on_ok(self, host, res):
-        record_step(self.play, res, host, "Passed")
+        record_step(self.play, self.task, res, host, "Passed")
 
     def runner_on_error(self, host, msg):
-        #record_step(self.play, res, host, "Failed")
+        #record_step(self.play, self.task, res, host, "Failed")
         pass
 
     def runner_on_skipped(self, host, item=None):
-        #record_step(self.play, res, host, "Skipped")
+        #record_step(self.play, self.task, res, host, "Skipped")
         pass
 
     def runner_on_unreachable(self, host, res):
-        record_step(self.play, res, host, "Failed")
+        record_step(self.play, self.task, res, host, "Failed")
 
     def runner_on_no_hosts(self):
-        #record_step(self.play, res, host, "Skipped")
+        #record_step(self.play, self.task, res, host, "Skipped")
         pass
 
     def runner_on_async_poll(self, host, res, jid, clock):
-        record_step(self.play, res, host, "Passed")
+        record_step(self.play, self.task, res, host, "Passed")
 
     def runner_on_async_ok(self, host, res, jid):
-        record_step(self.play, res, host, "Passed")
+        record_step(self.play, self.task, res, host, "Passed")
 
     def runner_on_async_failed(self, host, res, jid):
-        record_step(self.play, res, host, "Failed")
+        record_step(self.play, self.task, res, host, "Failed")
 
     def playbook_on_start(self):
         pass
@@ -710,7 +683,7 @@ class CallbackModule(object):
         pass
 
     def playbook_on_task_start(self, name, is_conditional):
-        pass
+        self.task = name
 
     def playbook_on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None,
                                 salt=None, default=None):
@@ -727,7 +700,7 @@ class CallbackModule(object):
 
     def playbook_on_play_start(self, pattern):
         self.play = self.play
-        #pass
+
 
     def playbook_on_stats(self, stats):
         write_report()

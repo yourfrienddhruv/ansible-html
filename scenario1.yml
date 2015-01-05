@@ -6,5 +6,5 @@
     scenario : "Invalid credentials"
 
   tasks:
-    - name: scenario - Invalid credentials
+    - name: Invalid credentials
       command: echo 'Invalid credentials'
